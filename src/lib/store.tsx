@@ -8,8 +8,13 @@ import {
   WeekSchedule,
   Discount,
   PaymentSummary,
+  ClassBreakdown,
   DIAS,
 } from "./types";
+
+function getGymCode(lugar: string): string {
+  return lugar === "Gimnasio A" ? "A" : "B";
+}
 
 interface AppData {
   coaches: Coach[];
@@ -60,11 +65,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Load all data from Supabase
   const loadData = useCallback(async () => {
+    const gymCode = getGymCode(data.lugarActual);
     const [coachesRes, franjasRes, horariosRes, descuentosRes] = await Promise.all([
-      getSupabase().from("coaches").select("*").order("nombre"),
-      getSupabase().from("franjas").select("*").order("hora_inicio"),
+      getSupabase().from("coaches").select("*").eq("gym", gymCode).order("nombre"),
+      getSupabase().from("franjas").select("*").eq("gym", gymCode).order("hora_inicio"),
       getSupabase().from("horarios").select("*"),
-      getSupabase().from("descuentos").select("*"),
+      getSupabase().from("descuentos").select("*").eq("gym", gymCode),
     ]);
 
     if (coachesRes.error) console.error("Error loading coaches:", coachesRes.error.message);
@@ -122,17 +128,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, [loadData, data.lugarActual]);
 
   // COACHES
   const addCoach = async (coach: Omit<Coach, "id">) => {
     const id = Date.now().toString();
+    const gymCode = getGymCode(data.lugarActual);
     await getSupabase().from("coaches").insert({
       id,
       nombre: coach.nombre,
       tipo_tarifa: coach.tipoTarifa,
       tarifa: coach.tarifa,
       color: coach.color,
+      gym: gymCode,
     });
     setData((prev) => ({
       ...prev,
@@ -169,10 +177,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // TIME SLOTS
   const addTimeSlot = async (slot: Omit<TimeSlot, "id">) => {
     const id = Date.now().toString();
+    const gymCode = getGymCode(data.lugarActual);
     await getSupabase().from("franjas").insert({
       id,
       hora_inicio: slot.horaInicio,
       hora_fin: slot.horaFin,
+      gym: gymCode,
     });
     setData((prev) => ({
       ...prev,
@@ -248,12 +258,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // DISCOUNTS
   const addDiscount = async (discount: Omit<Discount, "id">) => {
     const id = Date.now().toString();
+    const gymCode = getGymCode(data.lugarActual);
     await getSupabase().from("descuentos").insert({
       id,
       semana_id: discount.semanaId,
       coach_id: discount.coachId,
       concepto: discount.concepto,
       monto: discount.monto,
+      gym: gymCode,
     });
     setData((prev) => ({
       ...prev,
@@ -301,6 +313,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const clases = coachClassCount[coach.id];
         const subtotal = coachEarnings[coach.id] || 0;
         const tarifaPromedio = clases > 0 ? Math.round(subtotal / clases) : coach.tarifa;
+
+        // Generar desglose por tarifa
+        const breakdownMap = new Map<number, { count: number; subtotal: number }>();
+        for (const dia of DIAS) {
+          const daySlots = schedule.horarios[dia];
+          if (!daySlots) continue;
+          for (const slotId of Object.keys(daySlots)) {
+            const cell = daySlots[slotId];
+            if (cell.coachId === coach.id) {
+              const rate = cell.tarifaOverride ?? coach.tarifa;
+              const existing = breakdownMap.get(rate) || { count: 0, subtotal: 0 };
+              breakdownMap.set(rate, {
+                count: existing.count + 1,
+                subtotal: existing.subtotal + rate,
+              });
+            }
+          }
+        }
+        const breakdown: ClassBreakdown[] = Array.from(breakdownMap.entries())
+          .map(([rate, { count, subtotal: sub }]) => ({ rate, count, subtotal: sub }))
+          .sort((a, b) => b.rate - a.rate);
+
         const coachDiscounts = data.discounts.filter(
           (d) => d.coachId === coach.id && d.semanaId === semanaId
         );
@@ -313,6 +347,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           subtotal,
           descuentos,
           total: subtotal - descuentos,
+          breakdown,
         };
       })
       .sort((a, b) => b.total - a.total);

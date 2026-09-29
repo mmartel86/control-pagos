@@ -1,4 +1,4 @@
-import { Coach, DIAS, WeekSchedule, Discount } from "./types";
+import { Coach, DIAS, WeekSchedule, Discount, ClassBreakdown } from "./types";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -41,6 +41,30 @@ export function calculatePayments(
       const clases = clasesPorCoach[coach.id];
       const subtotal = earningsPorCoach[coach.id] || clases * coach.tarifa;
       const tarifaPromedio = clases > 0 ? Math.round(subtotal / clases) : coach.tarifa;
+
+      // Generar desglose por tarifa
+      const breakdownMap = new Map<number, { count: number; subtotal: number }>();
+      if (schedule) {
+        for (const dia of DIAS) {
+          const daySlots = schedule.horarios[dia];
+          if (!daySlots) continue;
+          for (const slotId of Object.keys(daySlots)) {
+            const cell = daySlots[slotId];
+            if (cell.coachId === coach.id) {
+              const rate = cell.tarifaOverride ?? coach.tarifa;
+              const existing = breakdownMap.get(rate) || { count: 0, subtotal: 0 };
+              breakdownMap.set(rate, {
+                count: existing.count + 1,
+                subtotal: existing.subtotal + rate,
+              });
+            }
+          }
+        }
+      }
+      const breakdown: ClassBreakdown[] = Array.from(breakdownMap.entries())
+        .map(([rate, { count, subtotal: sub }]) => ({ rate, count, subtotal: sub }))
+        .sort((a, b) => b.rate - a.rate);
+
       const coachDescuentos = discounts.filter(
         (d) => d.coachId === coach.id && d.semanaId === semanaId
       );
@@ -53,6 +77,7 @@ export function calculatePayments(
         subtotal,
         descuentos,
         total: subtotal - descuentos,
+        breakdown,
       };
     })
     .sort((a, b) => b.total - a.total);
@@ -79,17 +104,21 @@ export function generateGeneralPDF(
   autoTable(doc, {
     startY: 50,
     head: [
-      ["Coach", "Clases", "Tarifa Prom.", "Subtotal", "Descuento", "Total"],
+      ["Coach", "Desglose de Clases", "Subtotal", "Descuento", "Total"],
     ],
-    body: data.map((s) => [
-      s.coachNombre,
-      s.clases.toString(),
-      `$${s.tarifaPorClase}`,
-      `$${s.subtotal}`,
-      `$${s.descuentos}`,
-      `$${s.total}`,
-    ]),
-    foot: [["", "", "", "", "TOTAL:", `$${totalGeneral}`]],
+    body: data.map((s) => {
+      const desglose = s.breakdown
+        .map((b) => `${b.count}x $${b.rate}`)
+        .join(", ");
+      return [
+        s.coachNombre,
+        desglose || `${s.clases} clases`,
+        `$${s.subtotal}`,
+        `$${s.descuentos}`,
+        `$${s.total}`,
+      ];
+    }),
+    foot: [["", "", "", "TOTAL:", `$${totalGeneral}`]],
     theme: "grid",
     headStyles: { fillColor: [37, 99, 235] },
   });
@@ -128,17 +157,20 @@ export function generateIndividualPDF(
   doc.text(`Semana: ${semanaId} | Lugar: ${lugarActual}`, 14, 46);
   doc.text(`Generado: ${new Date().toLocaleDateString("es-MX")}`, 14, 54);
 
+  // Construir filas de desglose
+  const breakdownRows = summary.breakdown.map((b) => [
+    `${b.count} clase${b.count > 1 ? "s" : ""} a $${b.rate}`,
+    "",
+    `$${b.subtotal}`,
+  ]);
+
   autoTable(doc, {
     startY: 64,
     head: [["Concepto", "Detalle", "Monto"]],
     body: [
-      ["Clases impartidas", `${summary.clases} clases`, ""],
-      [
-        "Tarifa promedio por clase",
-        `$${summary.tarifaPorClase}/clase`,
-        `$${summary.subtotal}`,
-      ],
-      ["Descuentos", `${summary.descuentos} en descuentos`, `-$${summary.descuentos}`],
+      ...breakdownRows,
+      ["", "Subtotal", `$${summary.subtotal}`],
+      ["Descuentos", summary.descuentos > 0 ? `${summary.descuentos} en descuentos` : "Sin descuentos", `-$${summary.descuentos}`],
     ],
     foot: [["", "TOTAL A PAGAR", `$${summary.total}`]],
     theme: "grid",

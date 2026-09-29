@@ -31,6 +31,12 @@ export interface Discount {
   monto: number;
 }
 
+export interface ClassBreakdown {
+  rate: number;
+  count: number;
+  subtotal: number;
+}
+
 export interface PaymentSummary {
   coachId: string;
   coachNombre: string;
@@ -39,6 +45,7 @@ export interface PaymentSummary {
   subtotal: number;
   descuentos: number;
   total: number;
+  breakdown: ClassBreakdown[];
 }
 
 export const DIAS = [

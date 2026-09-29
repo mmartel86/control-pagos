@@ -49,8 +49,8 @@ export default function PagosPage() {
           <thead className="bg-gray-50">
             <tr>
               <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase">Coach</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase">Desglose de Clases</th>
               <th className="text-center px-5 py-3 text-xs font-medium text-gray-500 uppercase">Clases</th>
-              <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Tarifa Prom./Clase</th>
               <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Subtotal</th>
               <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Descuento</th>
               <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">Total</th>
@@ -77,8 +77,17 @@ export default function PagosPage() {
                         <span className="font-medium text-gray-900">{p.coachNombre}</span>
                       </div>
                     </td>
+                    <td className="px-5 py-3">
+                      <div className="text-sm text-gray-600">
+                        {p.breakdown.map((b, i) => (
+                          <div key={i}>
+                            {b.count} {b.count === 1 ? "clase" : "clases"} a ${b.rate}
+                            {b.count > 1 && <span className="text-gray-400"> (${b.subtotal})</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </td>
                     <td className="px-5 py-3 text-center text-gray-600">{p.clases}</td>
-                    <td className="px-5 py-3 text-right text-gray-600">${p.tarifaPorClase}</td>
                     <td className="px-5 py-3 text-right text-gray-600">${p.subtotal}</td>
                     <td className="px-5 py-3 text-right text-red-500">
                       {p.descuentos > 0 ? `-$${p.descuentos}` : "-"}
@@ -122,10 +131,14 @@ export default function PagosPage() {
                 <span className="font-semibold text-gray-900">{p.coachNombre}</span>
               </div>
               <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Clases</span>
-                  <span className="text-gray-900">{p.clases} x ${p.tarifaPorClase}</span>
-                </div>
+                {p.breakdown.map((b, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span className="text-gray-500">
+                      {b.count} {b.count === 1 ? "clase" : "clases"} a ${b.rate}
+                    </span>
+                    <span className="text-gray-900">${b.subtotal}</span>
+                  </div>
+                ))}
                 <div className="flex justify-between">
                   <span className="text-gray-500">Subtotal</span>
                   <span className="text-gray-900">${p.subtotal}</span>
