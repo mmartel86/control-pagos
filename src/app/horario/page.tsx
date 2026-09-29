@@ -247,7 +247,7 @@ export default function HorarioPage() {
                           onDragLeave={handleDragLeave}
                           onDrop={(e) => handleDrop(e, dia, slot.id)}
                           onDragEnd={handleDragEnd}
-                          className={`w-full min-h-[44px] px-2 py-1.5 rounded-md text-sm font-medium border-2 transition-all flex flex-col items-center justify-center gap-0.5 ${
+                          className={`w-full h-12 px-2 py-1.5 rounded-md text-sm font-medium border-2 transition-all flex flex-col items-center justify-center gap-0.5 ${
                             coachId
                               ? "border-transparent text-white cursor-grab active:cursor-grabbing"
                               : "border-dashed border-gray-200 text-gray-400 hover:border-gray-300"
